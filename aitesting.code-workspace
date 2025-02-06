@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../Downloads/stockfish-windows-x86-64-avx2/stockfish"
+		}
+	],
+	"settings": {}
+}
