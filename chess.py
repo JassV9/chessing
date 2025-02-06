@@ -507,15 +507,20 @@ class ChessGUI:
         self.eval_canvas = tk.Canvas(self.window, width=30, height=400, bg='gray')
         self.eval_canvas.grid(row=0, column=8, rowspan=8, padx=5)
         
-        # Create the evaluation bar (initially neutral)
-        self.eval_bar = self.eval_canvas.create_rectangle(
-            0, 200, 30, 400,  # Initially showing equal position
+        # Create initial evaluation bar (neutral position - equal parts black and white)
+        self.eval_bar_black = self.eval_canvas.create_rectangle(
+            0, 0, 30, 200,  # Top half
+            fill='black'
+        )
+        self.eval_bar_white = self.eval_canvas.create_rectangle(
+            0, 200, 30, 400,  # Bottom half
             fill='white'
         )
+        
         self.eval_text = self.eval_canvas.create_text(
             15, 10,  # Position at top of bar
             text="0.0",
-            fill='black'
+            fill='white'  # White text for better visibility
         )
         self.update_evaluation()
 
@@ -527,53 +532,57 @@ class ChessGUI:
             self.stockfish.set_position([move[0] + move[1] for move in self.game.move_history])
             eval = self.stockfish.get_evaluation()
             
-            def animate_bar(target_height, steps=10):
-                current_coords = self.eval_canvas.coords(self.eval_bar)
-                current_height = current_coords[1]
-                step_size = (target_height - current_height) / steps
-                
-                def step(remaining):
-                    if remaining > 0:
-                        current_coords = self.eval_canvas.coords(self.eval_bar)
-                        new_height = current_coords[1] + step_size
-                        self.eval_canvas.coords(self.eval_bar, 0, new_height, 30, 400)
-                        self.window.after(20, lambda: step(remaining - 1))
-                
-                step(steps)
-            
             # Convert evaluation to a visual representation
+            max_height = 400  # Total height of canvas
+            middle = max_height / 2
+            
             if eval['type'] == 'cp':
-                score = eval['value'] / 100.0
-                # Convert score to bar height (sigmoid-like transformation)
-                max_height = 400  # Total height of canvas
-                middle = max_height / 2
-                height = middle + (middle * (2 / (1 + 2.71828 ** (-score/2))))
+                score = eval['value'] / 100.0  # Convert centipawns to pawns
                 
-                # Set color based on advantage
-                if score > 0:  # White advantage
-                    intensity = int(min(255, 255 * (1 - score/5)))
-                    color = f'#{intensity:02x}{intensity:02x}{intensity:02x}'
-                else:  # Black advantage
-                    score = abs(score)
-                    intensity = int(min(255, 255 * (1 - score/5)))
-                    color = f'#{intensity:02x}{intensity:02x}{intensity:02x}'
+                # Use a linear mapping for scores between -5 and 5
+                normalized_score = max(min(score, 5), -5)  # Clamp between -5 and 5
                 
-                self.eval_canvas.itemconfig(self.eval_bar, fill=color)
-                animate_bar(height)
+                # Calculate the sizes of white and black sections
+                # Positive score means white advantage (white section grows)
+                white_height = middle * (1 + normalized_score / 5)
+                
+                # Create two rectangles: black on top, white on bottom
+                self.eval_canvas.delete(self.eval_bar_black)  # Remove old black section
+                self.eval_canvas.delete(self.eval_bar_white)  # Remove old white section
+                
+                # Create black section (top)
+                self.eval_bar_black = self.eval_canvas.create_rectangle(
+                    0, 0, 30, max_height - white_height,
+                    fill='black'
+                )
+                
+                # Create white section (bottom)
+                self.eval_bar_white = self.eval_canvas.create_rectangle(
+                    0, max_height - white_height, 30, max_height,
+                    fill='white'
+                )
                 
                 # Update text
-                text = f"+{score:.1f}" if score > 0 else f"{score:.1f}"
+                text = f"+{abs(score):.1f}" if score > 0 else f"{score:.1f}"
                 self.eval_canvas.itemconfig(self.eval_text, text=text)
                 
             else:  # Mate
                 score = eval['value']
-                # Show full bar for mate
-                if score > 0:  # White winning
-                    self.eval_canvas.itemconfig(self.eval_bar, fill='white')
-                    animate_bar(0)
-                else:  # Black winning
-                    self.eval_canvas.itemconfig(self.eval_bar, fill='black')
-                    animate_bar(400)
+                self.eval_canvas.delete(self.eval_bar_black)  # Remove old black section
+                self.eval_canvas.delete(self.eval_bar_white)  # Remove old white section
+                
+                if score > 0:  # White is winning
+                    # Fill entire bar with white
+                    self.eval_bar_white = self.eval_canvas.create_rectangle(
+                        0, 0, 30, max_height,
+                        fill='white'
+                    )
+                else:  # Black is winning
+                    # Fill entire bar with black
+                    self.eval_bar_black = self.eval_canvas.create_rectangle(
+                        0, 0, 30, max_height,
+                        fill='black'
+                    )
                 self.eval_canvas.itemconfig(self.eval_text, text=f"M{abs(score)}")
                 
         except Exception as e:
